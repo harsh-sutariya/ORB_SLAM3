@@ -29,6 +29,13 @@
 #include <thread>
 #include <include/CameraModels/Pinhole.h>
 #include <include/CameraModels/KannalaBrandt8.h>
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 
 namespace ORB_SLAM3
 {
@@ -1243,6 +1250,157 @@ bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight)
 
 Eigen::Vector3f Frame::UnprojectStereoFishEye(const int &i){
     return mRwc * mvStereo3Dpoints[i] + mOw;
+}
+
+cv::Mat Frame::GetStereoDisparity(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir)
+{
+    std::cout << "Computing stereo disparity using FoundationStereo for Frame " << mnId << std::endl;
+    
+    // Create temporary directory for this frame if it doesn't exist
+    std::string tempDir = outputDir + "/frame_" + std::to_string(mnId);
+    
+    // Create directory using mkdir system call
+    std::string mkdirCmd = "mkdir -p \"" + tempDir + "\"";
+    int mkdirResult = system(mkdirCmd.c_str());
+    if (mkdirResult != 0) {
+        std::cerr << "Error: Failed to create output directory: " << tempDir << std::endl;
+        return cv::Mat();
+    }
+    
+    // Save input images to temporary files
+    std::string leftPath = tempDir + "/left.png";
+    std::string rightPath = tempDir + "/right.png";
+    
+    if (!cv::imwrite(leftPath, imLeft)) {
+        std::cerr << "Error: Failed to save left image to " << leftPath << std::endl;
+        return cv::Mat();
+    }
+    
+    if (!cv::imwrite(rightPath, imRight)) {
+        std::cerr << "Error: Failed to save right image to " << rightPath << std::endl;
+        return cv::Mat();
+    }
+    
+    // Create camera intrinsics file for FoundationStereo
+    std::string intrinsicPath = tempDir + "/K.txt";
+    std::ofstream intrinsicFile(intrinsicPath);
+    if (intrinsicFile.is_open()) {
+        // EuRoC camera intrinsics (9 values in single line for run_demo.py)
+        intrinsicFile << "458.654 0.0 367.215 0.0 457.296 248.375 0.0 0.0 1.0\n";
+        intrinsicFile << "0.110\n";  // baseline in meters
+        intrinsicFile.close();
+    } else {
+        std::cerr << "Error: Failed to create intrinsics file" << std::endl;
+        return cv::Mat();
+    }
+    
+    // Construct the Python command to call original run_demo.py directly
+    std::ostringstream pythonCmd;
+    // Get absolute paths
+    char* leftAbsPath = realpath(leftPath.c_str(), NULL);
+    char* rightAbsPath = realpath(rightPath.c_str(), NULL);
+    char* intrinsicAbsPath = realpath(intrinsicPath.c_str(), NULL);
+    char* tempAbsPath = realpath(tempDir.c_str(), NULL);
+    
+    pythonCmd << "/bin/bash -c \"cd /home/lunar/FoundationStereo && source /home/lunar/miniconda3/etc/profile.d/conda.sh && conda activate foundation_stereo && python scripts/run_demo.py"
+              << " --left_file \"" << leftAbsPath << "\""
+              << " --right_file \"" << rightAbsPath << "\""
+              << " --intrinsic_file \"" << intrinsicAbsPath << "\""
+              << " --ckpt_dir \"/home/lunar/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth\""
+              << " --out_dir \"" << tempAbsPath << "\""
+              << " --valid_iters 32"
+              << " --get_pc 1"
+              << " --remove_invisible 1"
+              << " --denoise_cloud 0\"";
+    
+    std::cout << "Executing: " << pythonCmd.str() << std::endl;
+    
+    // Execute the Python script
+    int result = system(pythonCmd.str().c_str());
+    
+    // Clean up realpath allocations
+    free(leftAbsPath);
+    free(rightAbsPath);
+    free(intrinsicAbsPath);
+    free(tempAbsPath);
+    
+    if (result != 0) {
+        std::cerr << "Error: Python script execution failed with code " << result << std::endl;
+        return cv::Mat();
+    }
+    
+    // Load the raw disparity from the saved numpy array (this is the raw model output)
+    // We'll read the depth file and convert back to disparity without extra processing
+    std::string depthPath = tempDir + "/depth_meter.npy";
+    
+    // Create a simple Python script to load disparity and save as OpenCV-readable format
+    std::string converterScript = tempDir + "/load_disparity.py";
+    std::ofstream scriptFile(converterScript);
+    if (scriptFile.is_open()) {
+        scriptFile << "import numpy as np\n";
+        scriptFile << "import cv2\n";
+        scriptFile << "import os\n";
+        scriptFile << "\n";
+        scriptFile << "# Load depth from FoundationStereo using absolute path\n";
+        char* depthAbsPath = realpath(depthPath.c_str(), NULL);
+        char* tempAbsPath2 = realpath(tempDir.c_str(), NULL);
+        scriptFile << "depth_path = '" << (depthAbsPath ? depthAbsPath : depthPath) << "'\n";
+        scriptFile << "output_dir = '" << (tempAbsPath2 ? tempAbsPath2 : tempDir) << "'\n";
+        scriptFile << "\n";
+        scriptFile << "if os.path.exists(depth_path):\n";
+        scriptFile << "    depth = np.load(depth_path)\n";
+        scriptFile << "    \n";
+        scriptFile << "    # Convert depth back to disparity using same formula as FoundationStereo\n";
+        scriptFile << "    # disparity = fx * baseline / depth\n";
+        scriptFile << "    fx = 458.654\n";
+        scriptFile << "    baseline = 0.110\n";
+        scriptFile << "    disparity = fx * baseline / depth\n";
+        scriptFile << "    \n";
+        scriptFile << "    # Handle infinite values\n";
+        scriptFile << "    disparity[~np.isfinite(disparity)] = 0\n";
+        scriptFile << "    \n";
+        scriptFile << "    # Save as float32 TIFF (no scaling/normalization)\n";
+        scriptFile << "    output_path = os.path.join(output_dir, 'raw_disparity.tiff')\n";
+        scriptFile << "    cv2.imwrite(output_path, disparity.astype(np.float32))\n";
+        scriptFile << "    print(f'Disparity range: {disparity.min():.3f} to {disparity.max():.3f}')\n";
+        scriptFile << "    print(f'Saved to: {output_path}')\n";
+        scriptFile << "else:\n";
+        scriptFile << "    print(f'Error: Depth file not found: {depth_path}')\n";
+        scriptFile << "    exit(1)\n";
+        scriptFile.close();
+        
+        // Clean up realpath allocations
+        if (depthAbsPath) free(depthAbsPath);
+        if (tempAbsPath2) free(tempAbsPath2);
+        
+        // Execute the converter script
+        std::string converterCmd = "python " + converterScript;
+        int converterResult = system(converterCmd.c_str());
+        if (converterResult != 0) {
+            std::cerr << "Error: Disparity converter failed" << std::endl;
+            return cv::Mat();
+        }
+    }
+    
+    // Load the raw disparity (no post-processing)
+    std::string rawDisparityPath = tempDir + "/raw_disparity.tiff";
+    cv::Mat disparity = cv::imread(rawDisparityPath, cv::IMREAD_ANYDEPTH | cv::IMREAD_UNCHANGED);
+    
+    if (disparity.empty()) {
+        std::cerr << "Error: Failed to load raw disparity from " << rawDisparityPath << std::endl;
+        return cv::Mat();
+    } else {
+        std::cout << "Successfully loaded raw FoundationStereo disparity" << std::endl;
+    }
+    
+    // Optional: Clean up temporary files
+    std::string cleanupCmd = "rm -rf \"" + tempDir + "\"";
+    system(cleanupCmd.c_str());
+    
+    std::cout << "Disparity computation completed. Size: " << disparity.size() 
+              << ", Type: " << disparity.type() << std::endl;
+    
+    return disparity;
 }
 
 } //namespace ORB_SLAM

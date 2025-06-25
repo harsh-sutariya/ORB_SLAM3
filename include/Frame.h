@@ -118,6 +118,9 @@ public:
     // Associate a "right" coordinate to a keypoint if there is valid depth in the depthmap.
     void ComputeStereoFromRGBD(const cv::Mat &imDepth);
 
+    // Compute stereo disparity using deep learning model (FoundationStereo)
+    cv::Mat GetStereoDisparity(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir = "./test_outputs/");
+
     // Backprojects a keypoint (if stereo/depth info available) into 3D world coordinates.
     bool UnprojectStereo(const int &i, Eigen::Vector3f &x3D);
 

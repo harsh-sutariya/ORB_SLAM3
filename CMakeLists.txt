@@ -39,8 +39,8 @@ MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
 find_package(Eigen3 3.1.0 REQUIRED)
-find_package(Pangolin REQUIRED)
-find_package(realsense2)
+find_package(Pangolin QUIET)
+find_package(realsense2 QUIET)
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
@@ -48,8 +48,11 @@ ${PROJECT_SOURCE_DIR}/include
 ${PROJECT_SOURCE_DIR}/include/CameraModels
 ${PROJECT_SOURCE_DIR}/Thirdparty/Sophus
 ${EIGEN3_INCLUDE_DIR}
-${Pangolin_INCLUDE_DIRS}
 )
+
+if(Pangolin_FOUND)
+    include_directories(${Pangolin_INCLUDE_DIRS})
+endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
@@ -118,12 +121,15 @@ add_subdirectory(Thirdparty/g2o)
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
-${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 -lboost_serialization
 -lcrypto
 )
+
+if(Pangolin_FOUND)
+    target_link_libraries(${PROJECT_NAME} ${Pangolin_LIBRARIES})
+endif()
 
 # If RealSense SDK is found the library is added and its examples compiled
 if(realsense2_FOUND)
@@ -169,8 +175,13 @@ add_executable(stereo_kitti
 target_link_libraries(stereo_kitti ${PROJECT_NAME})
 
 add_executable(stereo_euroc
-        Examples/Stereo/stereo_euroc.cc)
+Examples/Stereo/stereo_euroc.cc)
 target_link_libraries(stereo_euroc ${PROJECT_NAME})
+
+# FoundationStereo integration example
+add_executable(stereo_euroc_foundationstereo
+Examples/Stereo/stereo_euroc_foundationstereo.cc)
+target_link_libraries(stereo_euroc_foundationstereo ${PROJECT_NAME})
 
 add_executable(stereo_tum_vi
         Examples/Stereo/stereo_tum_vi.cc)
@@ -378,6 +389,24 @@ target_link_libraries(stereo_inertial_euroc_old ${PROJECT_NAME})
 add_executable(stereo_inertial_tum_vi_old
         Examples_old/Stereo-Inertial/stereo_inertial_tum_vi.cc)
 target_link_libraries(stereo_inertial_tum_vi_old ${PROJECT_NAME})
+
+# Test Stereo Disparity Example
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples)
+
+add_executable(test_stereo_disparity
+Examples/test_stereo_disparity.cpp)
+
+target_link_libraries(test_stereo_disparity 
+${PROJECT_NAME}
+${OpenCV_LIBS}
+${EIGEN3_LIBS}
+-lboost_serialization
+-lcrypto
+)
+
+if(Pangolin_FOUND)
+    target_link_libraries(test_stereo_disparity ${Pangolin_LIBRARIES})
+endif()
 
 if(realsense2_FOUND)
     add_executable(stereo_inertial_realsense_t265_old

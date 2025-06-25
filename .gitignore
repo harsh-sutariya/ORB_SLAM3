@@ -91,3 +91,45 @@ my_settings.txt
 borrar/*
 
 */ExecMean.txt
+
+# Ignore outputs, models, and generated files
+*output*/
+*outputs*/
+demo_output/
+test_outputs/
+*model*/
+*models*/
+pretrained_models/
+core/
+depth_anything/
+dinov2/
+
+# Model files
+*.pth
+*.pt
+*.pkl
+*.h5
+*.onnx
+*.tflite
+*.pb
+*.safetensors
+*.bin
+
+# Cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+
+# Logs and debug files
+*.log
+logs/
+debug/
+*.debug

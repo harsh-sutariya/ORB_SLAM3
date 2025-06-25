@@ -1,0 +1,17 @@
+# Add this to your main CMakeLists.txt or create a separate CMakeLists.txt for the example
+
+# Test Stereo Disparity Example
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples)
+
+add_executable(test_stereo_disparity
+Examples/test_stereo_disparity.cpp)
+
+target_link_libraries(test_stereo_disparity 
+${PROJECT_NAME}
+${OpenCV_LIBS}
+${EIGEN3_LIBS}
+${Pangolin_LIBRARIES}
+)
+
+# Make sure the output directory exists
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/test_outputs) 
