@@ -114,6 +114,12 @@ public:
     // Search a match for each keypoint in the left image to a keypoint in the right image.
     // If there is a match, depth is computed and the right coordinate associated to the left keypoint is stored.
     void ComputeStereoMatches();
+    
+    // Computes stereo correspondences using FoundationStereo deep learning model
+    void ComputeStereoMatchesFoundationStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir = "./test_outputs/");
+    
+    // Hybrid approach: Traditional stereo matching enhanced with FoundationStereo for low-coverage areas
+    void ComputeStereoMatchesHybrid(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir = "./test_outputs/");
 
     // Associate a "right" coordinate to a keypoint if there is valid depth in the depthmap.
     void ComputeStereoFromRGBD(const cv::Mat &imDepth);

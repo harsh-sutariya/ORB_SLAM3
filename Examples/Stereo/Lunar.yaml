@@ -1,0 +1,102 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# System config for Lunar Stereo Dataset
+#--------------------------------------------------------------------------------------------
+
+# When the variables are commented, the system doesn't load a previous session or not store the current one
+
+# If the LoadFile doesn't exist, the system give a message and create a new Atlas from scratch
+#System.LoadAtlasFromFile: "Session_Lunar_Stereo"
+
+# The store file is created from the current session, if a file with the same name exists it is deleted
+#System.SaveAtlasToFile: "Session_Lunar_Stereo"
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters for Lunar Stereo Dataset
+# These parameters are extracted from the rosbag calibration data
+#--------------------------------------------------------------------------------------------
+File.version: "1.0"
+
+Camera.type: "PinHole"
+
+# Camera calibration parameters (from rosbag camera_info)
+# Left camera (cam0)
+Camera1.fx: 458.0
+Camera1.fy: 458.0
+Camera1.cx: 320.0
+Camera1.cy: 240.0
+
+# No distortion coefficients (empty D array in rosbag)
+Camera1.k1: 0.0
+Camera1.k2: 0.0
+Camera1.p1: 0.0
+Camera1.p2: 0.0
+
+# Right camera (cam1) - same intrinsics as left
+Camera2.fx: 458.0
+Camera2.fy: 458.0
+Camera2.cx: 320.0
+Camera2.cy: 240.0
+
+# No distortion coefficients (empty D array in rosbag)
+Camera2.k1: 0.0
+Camera2.k2: 0.0
+Camera2.p1: 0.0
+Camera2.p2: 0.0
+
+# Camera resolution
+Camera.width: 640
+Camera.height: 480
+
+# Camera frames per second (must be integer - using rounded value)
+Camera.fps: 4
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+# Stereo baseline and transformation
+# Baseline: 16.2cm (extracted from rosbag P matrix)
+Stereo.ThDepth: 40.0
+Stereo.T_c1_c2: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: f
+  data: [1.0, 0.0, 0.0, 0.162,
+         0.0, 1.0, 0.0, 0.0,
+         0.0, 0.0, 1.0, 0.0,
+         0.0, 0.0, 0.0, 1.0]
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters (optimized for lunar environment)
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+# Increased for better tracking in challenging lunar lighting
+ORBextractor.nFeatures: 2000
+
+# ORB Extractor: Scale factor between levels in the scale pyramid 	
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid	
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Lowered thresholds for lunar lighting conditions
+ORBextractor.iniThFAST: 15
+ORBextractor.minThFAST: 5
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0
+Viewer.imageViewScale: 1.0 

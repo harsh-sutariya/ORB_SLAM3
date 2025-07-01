@@ -145,7 +145,20 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_StartStereoMatches = std::chrono::steady_clock::now();
 #endif
-    ComputeStereoMatches();
+
+    // Check if we should use FoundationStereo (environment variable or frame interval)
+    static bool useFoundationStereo = (getenv("USE_FOUNDATIONSTEREO") != nullptr);
+    static int frameInterval = getenv("FOUNDATIONSTEREO_INTERVAL") ? atoi(getenv("FOUNDATIONSTEREO_INTERVAL")) : 1;
+    static int frameCounter = 0;
+    
+    if (useFoundationStereo && (frameCounter % frameInterval == 0)) {
+        std::cout << "Frame " << mnId << ": Using FoundationStereo for stereo matching" << std::endl;
+        ComputeStereoMatchesFoundationStereo(imLeft, imRight, "./foundationstereo_slam_output");
+    } else {
+        ComputeStereoMatches();
+    }
+    frameCounter++;
+
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_EndStereoMatches = std::chrono::steady_clock::now();
 
@@ -1267,16 +1280,29 @@ cv::Mat Frame::GetStereoDisparity(const cv::Mat &imLeft, const cv::Mat &imRight,
         return cv::Mat();
     }
     
-    // Save input images to temporary files
+    // Save input images to temporary files (convert to RGB if needed)
     std::string leftPath = tempDir + "/left.png";
     std::string rightPath = tempDir + "/right.png";
     
-    if (!cv::imwrite(leftPath, imLeft)) {
+    cv::Mat leftRGB, rightRGB;
+    if (imLeft.channels() == 1) {
+        cv::cvtColor(imLeft, leftRGB, cv::COLOR_GRAY2RGB);
+    } else {
+        leftRGB = imLeft.clone();
+    }
+    
+    if (imRight.channels() == 1) {
+        cv::cvtColor(imRight, rightRGB, cv::COLOR_GRAY2RGB);
+    } else {
+        rightRGB = imRight.clone();
+    }
+    
+    if (!cv::imwrite(leftPath, leftRGB)) {
         std::cerr << "Error: Failed to save left image to " << leftPath << std::endl;
         return cv::Mat();
     }
     
-    if (!cv::imwrite(rightPath, imRight)) {
+    if (!cv::imwrite(rightPath, rightRGB)) {
         std::cerr << "Error: Failed to save right image to " << rightPath << std::endl;
         return cv::Mat();
     }
@@ -1401,6 +1427,108 @@ cv::Mat Frame::GetStereoDisparity(const cv::Mat &imLeft, const cv::Mat &imRight,
               << ", Type: " << disparity.type() << std::endl;
     
     return disparity;
+}
+
+void Frame::ComputeStereoMatchesFoundationStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir)
+{
+    std::cout << "Computing stereo matches using FoundationStereo for Frame " << mnId << std::endl;
+    
+    // Initialize depth and right coordinates vectors
+    mvuRight = vector<float>(N,-1.0f);
+    mvDepth = vector<float>(N,-1.0f);
+    
+    // Get dense disparity map from FoundationStereo
+    cv::Mat disparityMap = GetStereoDisparity(imLeft, imRight, outputDir);
+    
+    if (disparityMap.empty()) {
+        std::cerr << "FoundationStereo failed, falling back to traditional matching" << std::endl;
+        ComputeStereoMatches(); // Fallback to traditional method
+        return;
+    }
+    
+    // Extract depth at ORB keypoint locations
+    int validDepths = 0;
+    for(int i = 0; i < N; i++) {
+        const cv::KeyPoint &kp = mvKeysUn[i]; // Use undistorted keypoints
+        
+        // Get pixel coordinates
+        int u = static_cast<int>(kp.pt.x + 0.5f);
+        int v = static_cast<int>(kp.pt.y + 0.5f);
+        
+        // Check bounds
+        if(u >= 0 && u < disparityMap.cols && v >= 0 && v < disparityMap.rows) {
+            float disparity = disparityMap.at<float>(v, u);
+            
+            // Validate disparity (should be positive and reasonable)
+            if(disparity > 0.1f && disparity < 200.0f) { // Reasonable disparity range
+                // Convert disparity to depth: depth = baseline * focal_length / disparity
+                mvDepth[i] = mbf / disparity;
+                
+                // Compute right image u coordinate: u_right = u_left - disparity
+                mvuRight[i] = kp.pt.x - disparity;
+                
+                validDepths++;
+            }
+        }
+    }
+    
+    std::cout << "FoundationStereo: Found " << validDepths << " valid depths out of " 
+              << N << " ORB keypoints (" << (100.0f * validDepths / N) << "%)" << std::endl;
+}
+
+void Frame::ComputeStereoMatchesHybrid(const cv::Mat &imLeft, const cv::Mat &imRight, const std::string &outputDir)
+{
+    std::cout << "Computing hybrid stereo matches (Traditional + FoundationStereo) for Frame " << mnId << std::endl;
+    
+    // First, try traditional stereo matching
+    ComputeStereoMatches();
+    
+    // Count how many keypoints got valid depth from traditional matching
+    int traditionalMatches = 0;
+    for(int i = 0; i < N; i++) {
+        if(mvDepth[i] > 0) traditionalMatches++;
+    }
+    
+    std::cout << "Traditional matching found " << traditionalMatches << " out of " << N << " keypoints" << std::endl;
+    
+    // If traditional matching coverage is low, enhance with FoundationStereo
+    float coverageRatio = static_cast<float>(traditionalMatches) / N;
+    if(coverageRatio < 0.7f) { // If less than 70% coverage
+        std::cout << "Low traditional coverage (" << (coverageRatio*100) << "%), enhancing with FoundationStereo..." << std::endl;
+        
+        // Get FoundationStereo disparity map
+        cv::Mat disparityMap = GetStereoDisparity(imLeft, imRight, outputDir);
+        
+        if(!disparityMap.empty()) {
+            int enhancedMatches = 0;
+            
+            // Fill in missing depths using FoundationStereo
+            for(int i = 0; i < N; i++) {
+                if(mvDepth[i] <= 0) { // No traditional match found
+                    const cv::KeyPoint &kp = mvKeysUn[i];
+                    
+                    int u = static_cast<int>(kp.pt.x + 0.5f);
+                    int v = static_cast<int>(kp.pt.y + 0.5f);
+                    
+                    if(u >= 0 && u < disparityMap.cols && v >= 0 && v < disparityMap.rows) {
+                        float disparity = disparityMap.at<float>(v, u);
+                        
+                        if(disparity > 0.1f && disparity < 200.0f) {
+                            mvDepth[i] = mbf / disparity;
+                            mvuRight[i] = kp.pt.x - disparity;
+                            enhancedMatches++;
+                        }
+                    }
+                }
+            }
+            
+            std::cout << "FoundationStereo enhanced " << enhancedMatches << " additional keypoints" << std::endl;
+            std::cout << "Total matches: " << (traditionalMatches + enhancedMatches) << " out of " << N 
+                      << " (" << (100.0f * (traditionalMatches + enhancedMatches) / N) << "%)" << std::endl;
+        }
+    } else {
+        std::cout << "Traditional matching sufficient (" << (coverageRatio*100) << "% coverage)" << std::endl;
+    }
 }
 
 } //namespace ORB_SLAM

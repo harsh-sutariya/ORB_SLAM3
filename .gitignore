@@ -103,6 +103,7 @@ pretrained_models/
 core/
 depth_anything/
 dinov2/
+lunar_mav0_data/
 
 # Model files
 *.pth

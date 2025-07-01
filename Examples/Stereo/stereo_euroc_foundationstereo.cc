@@ -21,6 +21,7 @@
 #include<fstream>
 #include<iomanip>
 #include<chrono>
+#include<sys/stat.h>
 
 #include<opencv2/core/core.hpp>
 
@@ -30,6 +31,25 @@ using namespace std;
 
 void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
                 vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps);
+
+// Helper function to create output directory structure
+string CreateOutputDirectory(const string &pathSeq, const string &method)
+{
+    string outputDir = pathSeq + "/mav0/output/" + method;
+    
+    // Create directory structure
+    string mkdirCmd = "mkdir -p \"" + outputDir + "\"";
+    int result = system(mkdirCmd.c_str());
+    
+    if (result == 0) {
+        cout << "Created output directory: " << outputDir << endl;
+    } else {
+        cout << "Warning: Could not create directory " << outputDir << ". Files will be saved to current directory." << endl;
+        return "";
+    }
+    
+    return outputDir;
+}
 
 int main(int argc, char **argv)
 {  
@@ -143,9 +163,7 @@ int main(int argc, char **argv)
                 cout << "Computing FoundationStereo disparity for frame " << ni << " of sequence " << seq << endl;
                 
                 // Create output directory
-                string outputDir = "./test_outputs/foundationstereo_sequence_" + to_string(seq);
-                string mkdirCmd = "mkdir -p \"" + outputDir + "\"";
-                system(mkdirCmd.c_str());
+                string outputDir = CreateOutputDirectory(string(argv[(2*seq) + 3]), "foundationstereo");
                 
                 // Use a Frame instance to compute FoundationStereo disparity
                 // Note: This creates a temporary frame just for disparity computation
@@ -257,18 +275,36 @@ int main(int argc, char **argv)
         cout << "Mean FoundationStereo time: " << totalFoundationStereoTime/foundationStereoFrames << endl;
     }
 
+    // Create output directory for FoundationStereo results
+    string pathSeq(argv[3]); // Get the first sequence path
+    string outputDir = CreateOutputDirectory(pathSeq, "foundationstereo");
+
     // Save camera trajectory
     if (bFileName)
     {
-        const string kf_file =  "kf_" + string(argv[argc-1]) + "_foundationstereo.txt";
-        const string f_file =  "f_" + string(argv[argc-1]) + "_foundationstereo.txt";
+        const string kf_file = outputDir.empty() ? 
+            ("kf_" + string(argv[argc-1]) + "_foundationstereo.txt") : 
+            (outputDir + "/kf_" + string(argv[argc-1]) + "_foundationstereo.txt");
+        const string f_file = outputDir.empty() ? 
+            ("f_" + string(argv[argc-1]) + "_foundationstereo.txt") : 
+            (outputDir + "/f_" + string(argv[argc-1]) + "_foundationstereo.txt");
         SLAM.SaveTrajectoryEuRoC(f_file);
         SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+        cout << "FoundationStereo trajectory saved to: " << f_file << endl;
+        cout << "FoundationStereo keyframe trajectory saved to: " << kf_file << endl;
     }
     else
     {
-        SLAM.SaveTrajectoryEuRoC("CameraTrajectory_FoundationStereo.txt");
-        SLAM.SaveKeyFrameTrajectoryEuRoC("KeyFrameTrajectory_FoundationStereo.txt");
+        const string kf_file = outputDir.empty() ? 
+            "KeyFrameTrajectory_FoundationStereo.txt" : 
+            (outputDir + "/KeyFrameTrajectory_FoundationStereo.txt");
+        const string f_file = outputDir.empty() ? 
+            "CameraTrajectory_FoundationStereo.txt" : 
+            (outputDir + "/CameraTrajectory_FoundationStereo.txt");
+        SLAM.SaveTrajectoryEuRoC(f_file);
+        SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+        cout << "FoundationStereo trajectory saved to: " << f_file << endl;
+        cout << "FoundationStereo keyframe trajectory saved to: " << kf_file << endl;
     }
 
     return 0;

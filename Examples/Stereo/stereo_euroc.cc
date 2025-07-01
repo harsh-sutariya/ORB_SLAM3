@@ -21,6 +21,7 @@
 #include<fstream>
 #include<iomanip>
 #include<chrono>
+#include<sys/stat.h>
 
 #include<opencv2/core/core.hpp>
 
@@ -30,6 +31,25 @@ using namespace std;
 
 void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
                 vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps);
+
+// Helper function to create output directory structure
+string CreateOutputDirectory(const string &pathSeq, const string &method)
+{
+    string outputDir = pathSeq + "/mav0/output/" + method;
+    
+    // Create directory structure
+    string mkdirCmd = "mkdir -p \"" + outputDir + "\"";
+    int result = system(mkdirCmd.c_str());
+    
+    if (result == 0) {
+        cout << "Created output directory: " << outputDir << endl;
+    } else {
+        cout << "Warning: Could not create directory " << outputDir << ". Files will be saved to current directory." << endl;
+        return "";
+    }
+    
+    return outputDir;
+}
 
 int main(int argc, char **argv)
 {  
@@ -168,18 +188,36 @@ int main(int argc, char **argv)
     // Stop all threads
     SLAM.Shutdown();
 
+    // Create output directory for ORB-SLAM3 results
+    string pathSeq(argv[3]); // Get the first sequence path
+    string outputDir = CreateOutputDirectory(pathSeq, "orbslam3");
+    
     // Save camera trajectory
     if (bFileName)
     {
-        const string kf_file =  "kf_" + string(argv[argc-1]) + ".txt";
-        const string f_file =  "f_" + string(argv[argc-1]) + ".txt";
+        const string kf_file = outputDir.empty() ? 
+            ("kf_" + string(argv[argc-1]) + ".txt") : 
+            (outputDir + "/kf_" + string(argv[argc-1]) + ".txt");
+        const string f_file = outputDir.empty() ? 
+            ("f_" + string(argv[argc-1]) + ".txt") : 
+            (outputDir + "/f_" + string(argv[argc-1]) + ".txt");
         SLAM.SaveTrajectoryEuRoC(f_file);
         SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+        cout << "ORB-SLAM3 trajectory saved to: " << f_file << endl;
+        cout << "ORB-SLAM3 keyframe trajectory saved to: " << kf_file << endl;
     }
     else
     {
-        SLAM.SaveTrajectoryEuRoC("CameraTrajectory.txt");
-        SLAM.SaveKeyFrameTrajectoryEuRoC("KeyFrameTrajectory.txt");
+        const string kf_file = outputDir.empty() ? 
+            "KeyFrameTrajectory.txt" : 
+            (outputDir + "/KeyFrameTrajectory.txt");
+        const string f_file = outputDir.empty() ? 
+            "CameraTrajectory.txt" : 
+            (outputDir + "/CameraTrajectory.txt");
+        SLAM.SaveTrajectoryEuRoC(f_file);
+        SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+        cout << "ORB-SLAM3 trajectory saved to: " << f_file << endl;
+        cout << "ORB-SLAM3 keyframe trajectory saved to: " << kf_file << endl;
     }
 
     return 0;
