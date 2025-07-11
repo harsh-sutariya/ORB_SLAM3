@@ -40,6 +40,8 @@ MESSAGE(${OpenCV_VERSION})
 
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin QUIET)
+find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
 find_package(realsense2 QUIET)
 
 include_directories(
@@ -123,8 +125,13 @@ ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
+${OPENGL_LIBRARIES}
+${GLEW_LIBRARIES}
 -lboost_serialization
 -lcrypto
+-lncursesw
+-ltinfo
+-lffi
 )
 
 if(Pangolin_FOUND)
