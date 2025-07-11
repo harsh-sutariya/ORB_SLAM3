@@ -21,11 +21,11 @@ File.version: "1.0"
 Camera.type: "PinHole"
 
 # Camera calibration parameters (from rosbag camera_info)
-# Left camera (cam0)
-Camera1.fx: 458.0
-Camera1.fy: 458.0
-Camera1.cx: 320.0
-Camera1.cy: 240.0
+# Left camera (cam0) - Updated for 1280x720 images
+Camera1.fx: 916.0
+Camera1.fy: 916.0
+Camera1.cx: 640.0
+Camera1.cy: 360.0
 
 # No distortion coefficients (empty D array in rosbag)
 Camera1.k1: 0.0
@@ -34,10 +34,10 @@ Camera1.p1: 0.0
 Camera1.p2: 0.0
 
 # Right camera (cam1) - same intrinsics as left
-Camera2.fx: 458.0
-Camera2.fy: 458.0
-Camera2.cx: 320.0
-Camera2.cy: 240.0
+Camera2.fx: 916.0
+Camera2.fy: 916.0
+Camera2.cx: 640.0
+Camera2.cy: 360.0
 
 # No distortion coefficients (empty D array in rosbag)
 Camera2.k1: 0.0
@@ -45,9 +45,9 @@ Camera2.k2: 0.0
 Camera2.p1: 0.0
 Camera2.p2: 0.0
 
-# Camera resolution
-Camera.width: 640
-Camera.height: 480
+# Camera resolution - Updated to match actual images
+Camera.width: 1280
+Camera.height: 720
 
 # Camera frames per second (must be integer - using rounded value)
 Camera.fps: 4
